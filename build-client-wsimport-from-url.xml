@@ -1,0 +1,102 @@
+<project name="client-stubs" default="build-all" basedir="./">
+	<!-- ============================== VARIABLE DEFINITIONS ============================== -->
+	<!-- all properties are in build.properties -->
+	<property name="base.dir" value="./" />
+	<property file="${base.dir}/build.properties" />
+	<property name="build.home" value="${base.dir}/classes" />
+	<property name="src.home" value="${base.dir}/src" />
+	<property name="wsdl-import-names" value="${base.dir}/wsdl-import-names.properties" />
+
+	<property name="target.dist.dir" value="./dist" />
+	<property name="target.wsdl.home" value="${src.home}/META-INF/wsdl" />
+	<property name="target.scoui.dir" value="../../scoUI/scoui/WebContent/WEB-INF" />
+	<property name="target.scoui.wsdl.dir" value="${target.scoui.dir}/wsdl" />
+	<property name="target.scoui-lib.dir" value="../../scoUI/scoui-lib/lib" />
+	<property name="target.scoserviceJunitTest.dir" value="../../scoService/scoserviceJunitTest/lib" />
+	<property name="ant-contrib.jar" location="lib/ant-contrib.jar" />
+	
+	<property name="j2ee.dir" value="${server.lib}" />
+	<property name="target" value="1.6" />
+	<property name="source" value="1.6" />
+
+	<!-- ============================== CLASSPATH DEFINITIONS ============================== -->
+	<path id="j2ee.classpath">
+		<pathelement location="${j2ee.dir}/j2ee.jar" />
+	</path>
+	<path id="project.classpath">
+		<path refid="j2ee.classpath" />
+		<pathelement location="${ibm.jaxws.path}" />
+	</path>
+
+	<path id="wsimport.classpath">
+		<path refid="project.classpath" />
+		<pathelement location="${build.home}" />
+	</path>
+
+	<!-- ============= generate the stubs to invoke the websrvice ========================= -->
+	<taskdef name="wsimport" classname="com.sun.tools.ws.ant.WsImport2">
+		<classpath refid="wsimport.classpath" />
+	</taskdef>
+
+	<!-- ============================== MAIN BUILD TARGETS ============================== -->
+	<target name="build-all" depends="clean-all, init, prepare-jar, copy-to-target">
+		<description>Clean all existing stubs and create them from scratch.</description>
+	</target>
+	<target name="clean-all" description="Delete old src and build directories">
+		<delete dir="${src.home}" includes="com/bns/**/*.java" />
+		<delete dir="${build.home}" includes="**/*.class" />
+		<delete dir="${target.wsdl.home}" includes="**/*.wsdl" />
+	</target>
+	<target name="init" description="Create /build and /dest folder">
+		<mkdir dir="${build.home}" />
+		<mkdir dir="${target.dist.dir}" />
+		<!-- Precompile the custom adapters for wsimport -->
+		<javac srcdir="${src.home}/com/scoservice" debug="true" debuglevel="${debuglevel}" destdir="${build.home}" source="${source}" target="${target}" fork="yes" executable="${ibm.jdk}">
+			<classpath refid="project.classpath" />
+		</javac>
+		<!-- Prepare list of wsdl files to import -->
+		<taskdef resource="net/sf/antcontrib/antcontrib.properties" classpath="${ant-contrib.jar}" />
+		<loadfile property="file-content" srcFile="${wsdl-import-names}" />
+		<foreach list="${file-content}" target="begin-import" param="var" delimiter="${line.separator}" />
+	</target>
+	
+	<!-- =============== Download and generate stubs for each wsdl files ====== -->
+	<target name="begin-import">
+		<echo message="Downloading and generating stubs for :: ${var}" />
+		<copy todir="${target.wsdl.home}" flatten="true" overwrite="true">
+			<resources>
+				<file file="${var}" />
+				<url url="${web.service.url}/${var}" />
+			</resources>
+		</copy>
+		<wsimport wsdl="${web.service.url}/${var}" sourcedestdir="${src.home}" destdir="${build.home}" binding="binding.xjb" wsdllocation="META-INF/wsdl/${var}" />
+	</target>
+
+	<!-- ============================== BUILD JAR ============================== -->
+	<target name="prepare-jar" depends="init">
+		<javac debug="true" debuglevel="${debuglevel}" destdir="${build.home}" source="${source}" target="${target}" fork="yes" executable="${ibm.jdk}">
+			<src path="${base.dir}" />
+			<classpath refid="j2ee.classpath" />
+		</javac>
+		<jar basedir="${build.home}" destfile="${target.dist.dir}/service-client-stubs.jar" excludes="**/*.java, **/*.jar" />
+	</target>
+
+	<!-- ============= COPY ALL REQUIRED FILES TO SCOSERVICE =================== -->
+	<target name="copy-to-target">
+		<copy todir="${target.scoui-lib.dir}" overwrite="true">
+			<fileset dir="${target.dist.dir}">
+				<include name="*.jar" />
+			</fileset>
+		</copy>
+		<copy todir="${target.scoserviceJunitTest.dir}" overwrite="true" failonerror="false">
+			<fileset dir="${target.dist.dir}">
+				<include name="*.jar" />
+			</fileset>
+		</copy>
+		<copy todir="${target.scoui.wsdl.dir}/scoservice" overwrite="true">
+			<fileset dir="${target.wsdl.home}">
+				<include name="*.wsdl" />
+			</fileset>
+		</copy>
+	</target>
+</project>
